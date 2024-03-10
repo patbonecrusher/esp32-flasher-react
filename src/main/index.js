@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow, dialog, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import processCompressedFile from './unzip_image'
+import extract_bin_partitions from './unzip_image'
 // import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer'
 // import find_esp32s_serial from './find_esp32s_serial'
 
@@ -38,31 +38,62 @@ function createWindow() {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  mainWindow.webContents.session.on(
-    'select-serial-port',
-    (event, portList, webContents, callback) => {
-      // Add listeners to handle ports being added or removed before the callback for `select-serial-port`
-      // is called.
-      mainWindow.webContents.session.on('serial-port-added', (event, port) => {
-        console.log('serial-port-added FIRED WITH', port)
-        // Optionally update portList to add the new port
-      })
+  // mainWindow.webContents.session.on(
+  //   'select-serial-port',
+  //   (event, portList, webContents, callback) => {
+  //     // Add listeners to handle ports being added or removed before the callback for `select-serial-port`
+  //     // is called.
+  //     mainWindow.webContents.session.on('serial-port-added', (event, port) => {
+  //       console.log('serial-port-added FIRED WITH', port)
+  //       // Optionally update portList to add the new port
+  //     })
 
-      mainWindow.webContents.session.on('serial-port-removed', (event, port) => {
-        console.log('serial-port-removed FIRED WITH', port)
-        // Optionally update portList to remove the port
-      })
+  //     mainWindow.webContents.session.on('serial-port-removed', (event, port) => {
+  //       console.log('serial-port-removed FIRED WITH', port)
+  //       // Optionally update portList to remove the port
+  //     })
 
-      console.log('select-serial-port FIRED WITH', portList)
-      event.preventDefault()
-      if (portList && portList.length > 0) {
-        console.log('select-serial-port FIRED WITH', portList[0].portId)
-        callback(portList[0].portId)
-      } else {
-        callback('') // Could not find any matching devices
-      }
+  //     console.log('select-serial-port FIRED WITH', portList)
+  //     event.preventDefault()
+  //     if (portList && portList.length > 0) {
+  //       console.log('select-serial-port FIRED WITH', portList[0].portId)
+  //       callback(portList[0].portId)
+  //     } else {
+  //       callback('') // Could not find any matching devices
+  //     }
+  //   }
+  // )
+
+  mainWindow.webContents.session.on('select-serial-port', (event, portList, webContents, callback) => {
+    event.preventDefault()
+    if (portList && portList.length > 0) {
+      callback(portList[0].portId)
+    } else {
+      callback('') //Could not find any matching devices
     }
-  )
+  })
+
+  mainWindow.webContents.session.on('serial-port-added', (event, port) => {
+    console.log('serial-port-added FIRED WITH', port)
+  })
+
+  mainWindow.webContents.session.on('serial-port-removed', (event, port) => {
+    console.log('serial-port-removed FIRED WITH', port)
+  })
+
+  mainWindow.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    if (permission === 'serial' && details.securityOrigin === 'file:///') {
+      return true
+    }
+  })
+
+  mainWindow.webContents.session.setDevicePermissionHandler((details) => {
+    if (details.deviceType === 'serial' && details.origin === 'file://') {
+      return true
+    }
+  })
+
+
 
   mainWindow.webContents.session.setPermissionCheckHandler(
     (webContents, permission, requestingOrigin, details) => {
@@ -92,7 +123,7 @@ function createWindow() {
     }
 
     // Show the open (folder) dialog.
-    dialog.showOpenDialog(mainWindow, options).then((result) => {
+    dialog.showOpenDialog(mainWindow, options).then(async (result) => {
       // Bail early if user cancelled dialog.
       if (result.canceled) {
         return
@@ -101,13 +132,14 @@ function createWindow() {
       // Get the selected path.
       let path = result.filePaths[0]
       console.log(path)
-      processCompressedFile(mainWindow, {
-        filePath: path,
-        options: { lazyEntries: false },
-        index: 0,
-        offset: 0,
-        target: 'manifest'
+      const bin_partitions = await extract_bin_partitions(path)
+      console.log(bin_partitions)
+      mainWindow.webContents.send('bin-file-unzipped', {
+        partitions: bin_partitions
       })
+
+      //mainWindow.webContents.send('bin-file-unzipped', bin_partitions)
+
       // More processing...
     })
   })

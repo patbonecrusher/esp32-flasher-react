@@ -1,75 +1,83 @@
-import { app } from 'electron'
-import fs from 'fs'
-import path from 'path'
+// import { app } from 'electron'
 const yauzl = require('yauzl')
 const csv = require('csv-parser')
+import { buffer } from 'node:stream/consumers'
+const { Readable } = require('stream') // Native Node Module
 
-function processPartitionsFile (mainWindow, zipParams, path) {
-  // Process partitions
-  fs.createReadStream(path)
-    .pipe(csv())
-    .on('data', (row) => {
-      // console.log(row)
-      processCompressedFile(mainWindow, {
-        filePath: zipParams.filePath,
-        options: { lazyEntries: false },
-        index: row.id,
-        offset: row.flashaddress,
-        target: row.filename
-      })
-    })
-    .on('end', () => {
-      console.log('Partitions CSV file successfully processed.')
-    })
+function bufferToStream(myBuffer) {
+  let tmp = new Readable()
+  tmp.push(myBuffer)
+  tmp.push(null)
+  return tmp
 }
 
-function saveFile (mainWindow, zipParams, fileName, readStream) {
-  const uploadDir = path.join(app.getPath('userData'), '/firmware/')
-  console.log(uploadDir)
-  // create folder if not existed!
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir)
-  }
+const unzip_file_in_memory = async (zip_file, zip_entry) => {
+  return new Promise((resolve) => {
+    zip_file.openReadStream(zip_entry, async (err, readStream) => {
+      const data = {
+        name: zip_entry.fileName,
+        buffer: await buffer(readStream)
+      }
+      resolve(data)
+    })
+  })
+}
 
-  const dest = path.join(uploadDir, fileName)
-  const file = fs.createWriteStream(dest)
+const unzip_in_memory = async (filepath) => {
+  return new Promise((resolve) => {
+    yauzl.open(filepath, { lazyEntries: true, autoClose: false }, (err, zipfile) => {
+      if (err) throw err
 
-  readStream.pipe(file)
-  readStream.on('end', async () => {
-    if (fileName === 'manifest') {
-      processPartitionsFile(mainWindow, zipParams, dest)
-      console.log('manifest file successfully processed.')
-    } else {
-      console.log('File saved.')
-      const buf = await fs.readFileSync(dest)
-      mainWindow.webContents.send('bin-file-unzipped', {
-        idx: parseInt(zipParams.index),
-        offset: zipParams.offset,
-        filename: fileName,
-        dest,
-        buf
+      const unzipped_files = []
+
+      zipfile.readEntry()
+      zipfile.on('entry', async (entry) => {
+        unzipped_files.push(await unzip_file_in_memory(zipfile, entry))
+        zipfile.readEntry()
       })
+
+      zipfile.once('end', () => {
+        zipfile.close()
+        resolve(unzipped_files)
+      })
+    })
+  })
+}
+
+const process_unzipped_content = async (unzipped_files) => {
+  return new Promise((resolve) => {
+    const manifest = unzipped_files.find((file) => file.name === 'manifest')
+    if (!manifest) {
+      console.log('No manifest file found')
+      return undefined
     }
-  })
-}
 
-export default function processCompressedFile(mainWindow, zipParams) {
-  yauzl.open(zipParams.filePath, zipParams.options, (err, zipFile) => {
-    if (err) throw err
-
-    zipFile.on('error', (err) => {
-      throw err
-    })
-
-    zipFile.on('entry', (entry) => {
-      // console.log('File:', entry.fileName)
-      zipFile.openReadStream(entry, (err, readStream) => {
-        if (err) throw err
-
-        if (zipParams.target === entry.fileName) {
-          saveFile(mainWindow, zipParams, entry.fileName, readStream)
-        }
+    const bin_images_info = []
+    bufferToStream(manifest.buffer).pipe(csv())
+      .on('data', (row) => {
+        const bin_entry = unzipped_files.find((file) => file.name === row.filename)
+        bin_images_info.push({
+          ...row,
+          data: bin_entry.buffer
+        })
       })
-    })
+      .on('end', () => {
+        resolve(bin_images_info)
+      })
   })
 }
+
+const extract_bin_partitions = async (zip_file_path) => {
+  const unzipped_files = await unzip_in_memory(zip_file_path)
+  return process_unzipped_content(unzipped_files)
+}
+
+export default extract_bin_partitions
+// ;(async function () {
+//   const bin_partitions = await extract_bin_partitions(
+//     '/Users/pat/Projects/appliedlogix/hcl/repos/moscow-firmware/StatTemp-Moscow-2.7.1-LOCAL.zip'
+//   )
+//   console.log(bin_partitions)
+//   console.log('Unzip image loaded')
+//   return bin_partitions
+// })()
