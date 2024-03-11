@@ -4,6 +4,7 @@ import { useEsp32sScanner } from '../hooks/useEsp32Scanner'
 import Backdrop from '@mui/material/Backdrop'
 import CircularProgress from '@mui/material/CircularProgress'
 import Button from '@mui/material/Button'
+import {Buffer} from 'buffer'
 
 import Esp32 from './Esp32'
 
@@ -46,11 +47,13 @@ function Esp32Picker() {
       const transport = new Transport(port, true)
       const flashOptions = {
         transport,
-        baudrate: parseInt("115200"),
+        baudrate: parseInt("460800"),
         // terminal: espLoaderTerminal,
       };
 
-      const esploader = new ESPLoader(flashOptions);
+      //-p /dev/cu.usbserial-144140 -b 460800 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 40m --flash_size 8MB 0x1000 bootloader/bootloader.bin 0x10000 stattemp-moscow.bin 0x8000 partition_table/partition-table.bin 0xd000 ota_data_initial.bin
+
+      const esploader = new ESPLoader(flashOptions)
       esploaderRef.current = esploader
 
       const chip = await esploader.main_fn()
@@ -75,6 +78,12 @@ function Esp32Picker() {
     }
   }
 
+  function convertUint8_to_hexStr(buffer) {
+    Array.from(buffer)
+      .map((i) => i.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
   const programFlash = async () => {
     console.log('programming flash')
 
@@ -82,15 +91,29 @@ function Esp32Picker() {
     const progressBars = []
 
     files.map((file) => {
-      fileArray.push({data: file.data.toString('binary'), address: file.flashaddress})
+      console.log(file.data)
+      //const bin_blob = textDecoder.decode(file.data)
+      const bin_blob = file.data.reduce((p, c) => p+String.fromCharCode(c), '')
+      //console.log(bin_blob)
+      console.log(bin_blob[0])
+      console.log(bin_blob[1])
+      console.log(bin_blob[2])
+      console.log(bin_blob[3])
+      console.log(bin_blob[0] === 0xe9)
+      console.log(file.flashaddress)
+      fileArray.push({data: bin_blob, address: Number(file.flashaddress)})
       progressBars.push(0)
     })
     const esploader = esploaderRef.current
 
     try {
+      //-p /dev/cu.usbserial-144140 -b 460800 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 40m --flash_size 8MB 0x1000 bootloader/bootloader.bin 0x10000 stattemp-moscow.bin 0x8000 partition_table/partition-table.bin 0xd000 ota_data_initial.bin
       const flashOptions = {
         fileArray: fileArray,
-        flashSize: "keep",
+        flashMode: "dio",
+        after: "hard_reset",
+        flashFreq: "40m",
+        flashSize: "8MB",
         eraseAll: false,
         compress: true,
         reportProgress: (fileIndex, written, total) => {

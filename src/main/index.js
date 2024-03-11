@@ -132,6 +132,7 @@ function createWindow() {
       // Get the selected path.
       let path = result.filePaths[0]
       console.log(path)
+
       const bin_partitions = await extract_bin_partitions(path)
       console.log(bin_partitions)
       mainWindow.webContents.send('bin-file-unzipped', {
