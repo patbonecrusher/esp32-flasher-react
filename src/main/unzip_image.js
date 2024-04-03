@@ -55,6 +55,8 @@ const process_unzipped_content = async (unzipped_files) => {
     const bin_images_info = []
     bufferToStream(manifest.buffer).pipe(csv())
       .on('data', (row) => {
+        console.log("Row: ", row)
+        if (!row.filename) return
         const bin_entry = unzipped_files.find((file) => file.name === row.filename)
         bin_images_info.push({
           ...row,
