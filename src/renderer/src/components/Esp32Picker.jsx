@@ -200,6 +200,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useEsp32sScanner } from '../hooks/useEsp32Scanner'
+import { FitAddon } from 'xterm-addon-fit';
 
 import Backdrop from '@mui/material/Backdrop'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -243,6 +244,7 @@ function Esp32Picker() {
   const xtermRef = useRef(null)
   const encoder = useRef(new TextEncoder());
   const terminal = useRef(null)
+  const fitaddon = useRef(null)
 
   useEffect(() => {
     window.api.binFileUnzipped((event, value) => {
@@ -252,13 +254,21 @@ function Esp32Picker() {
     })
     if (terminal.current === null) {
       terminal.current = new Terminal()
+      fitaddon.current = new FitAddon();
+      terminal.current.loadAddon(fitaddon.current)
+
       terminal.current.open(document.getElementById('terminal'))
     }
-}, [])
+    fitaddon.current.fit();
+  }, [])
 
   async function testIt() {
     try {
+      // const ports = await navigator.serial.getPorts({ filters });
+      // console.log(ports)
+      // ports.map((p) => console.log(p.getInfo()))
       const port = await navigator.serial.requestPort({ filters })
+      console.log(port)
       const portInfo = port.getInfo()
       console.log(JSON.stringify(portInfo, null, 2))
       setVidPid(portInfo)
@@ -329,11 +339,12 @@ function Esp32Picker() {
     while (true) {
       const val = await transport.rawRead();
       if (typeof val !== "undefined") {
-        term.writeln(val);
+        term.write(val);
       } else {
         break;
       }
     }
+    transport.disconnect();
   }
 
 
@@ -381,9 +392,8 @@ function Esp32Picker() {
         //calculateMD5Hash: (image) => CryptoJS.MD5(CryptoJS.enc.Latin1.parse(image)),
       }
       await esploader.write_flash(flashOptions)
-
-
-
+      await esploader.hard_reset()
+      await esploader.transport.disconnect()
     } catch (e) {
       console.error(e)
     } finally {
