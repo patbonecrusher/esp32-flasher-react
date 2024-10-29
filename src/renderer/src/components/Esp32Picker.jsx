@@ -233,7 +233,8 @@ const filters = [
   { usbVendorId: 0x2341, usbProductId: 0x0043 },
   { usbVendorId: 0x0403, usbProductId: 0x6010 },
   { usbVendorId: 0x10c4, usbProductId: 0xea60 },
-  { usbVendorId: 0x1a86, usbProductId: 0x7523 }
+  { usbVendorId: 0x1a86, usbProductId: 0x7523 },
+  { usbVendorId: 0x303a, usbProductId: 0x1001 },
 ]
 
 function Esp32Picker() {
