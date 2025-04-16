@@ -201,6 +201,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useEsp32sScanner } from '../hooks/useEsp32Scanner'
 import { FitAddon } from 'xterm-addon-fit';
+import SerialPortDialog from './SerialPortDialog';
 
 import Backdrop from '@mui/material/Backdrop'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -241,6 +242,8 @@ function Esp32Picker() {
   // const { esps, scanning, error, api } = useEsp32sScanner()
   const [files, setFiles] = useState([])
   const [vidpid, setVidPid] = useState(undefined)
+  const [serialPortDialogOpen, setSerialPortDialogOpen] = useState(false)
+  const [availablePorts, setAvailablePorts] = useState([])
   const esploaderRef = useRef(null)
   const xtermRef = useRef(null)
   const encoder = useRef(new TextEncoder());
@@ -248,11 +251,23 @@ function Esp32Picker() {
   const fitaddon = useRef(null)
 
   useEffect(() => {
+    // Set up event listeners for binaries and serial port selection
     window.api.binFileUnzipped((event, value) => {
       console.log('binFileUnzipped', value)
       setFiles(value.partitions)
       //xtermRef.current.terminal.writeln('Hello, World!\n')
     })
+    
+    // Add listener for serial ports available
+    window.api.serialPortsAvailable((event, ports) => {
+      console.log('Serial ports available:', ports)
+      setAvailablePorts(ports || [])
+      if (ports && ports.length > 0) {
+        setSerialPortDialogOpen(true)
+      }
+    })
+    
+    // Terminal setup
     if (terminal.current === null) {
       terminal.current = new Terminal()
       fitaddon.current = new FitAddon();
@@ -261,6 +276,11 @@ function Esp32Picker() {
       terminal.current.open(document.getElementById('terminal'))
     }
     fitaddon.current.fit();
+    
+    // Clean up listeners on unmount
+    return () => {
+      window.api.removeSerialPortsAvailableListener()
+    }
   }, [])
 
   async function testIt() {
@@ -430,6 +450,12 @@ function Esp32Picker() {
         <div key={file.filename}>{file.filename}</div>
       ))}
 
+      {/* Serial Port Selection Dialog */}
+      <SerialPortDialog 
+        open={serialPortDialogOpen} 
+        onClose={() => setSerialPortDialogOpen(false)} 
+        portList={availablePorts} 
+      />
     </div>
   )
 }

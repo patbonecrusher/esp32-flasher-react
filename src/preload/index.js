@@ -8,7 +8,11 @@ const api = {
   esp32sFound: (callback) => ipcRenderer.on('esp32s-serial-found', callback),
   removeEspsFoundListener: () => ipcRenderer.removeAllListeners('esps-found'),
   selectFwPackage: () => ipcRenderer.send('select-fw-package'),
-  binFileUnzipped: (callback) => ipcRenderer.on('bin-file-unzipped', callback)
+  binFileUnzipped: (callback) => ipcRenderer.on('bin-file-unzipped', callback),
+  // New IPC methods for serial port selection
+  selectSerialPort: (portId) => ipcRenderer.send('select-serial-port-response', portId),
+  serialPortsAvailable: (callback) => ipcRenderer.on('serial-ports-available', callback),
+  removeSerialPortsAvailableListener: () => ipcRenderer.removeAllListeners('serial-ports-available')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

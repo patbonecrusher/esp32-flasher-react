@@ -3,6 +3,9 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import extract_bin_partitions from './unzip_image'
+
+// Disable sandbox mode directly in the code
+app.commandLine.appendSwitch('no-sandbox')
 // import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer'
 // import find_esp32s_serial from './find_esp32s_serial'
 
@@ -72,24 +75,39 @@ function createWindow() {
   // User select an entry in the list, which results in a callback being called in the main process
   // which then call the callback with the select port.
   //
-  // Right now to support the espprog (where it has 2 port and you need to pick the highest number),
-  // we will special case it.
+  // Handle serial port selection by showing a user dialog
+  let pendingPortCallback = null;
+  let availablePorts = [];
+
   mainWindow.webContents.session.on(
     'select-serial-port',
     (event, portList, webContents, callback) => {
       event.preventDefault()
-      console.log('foo')
-      console.log(portList)
-
-      if (portList && portList.length == 1) {
-        callback(portList[0].portId)
-      } else if (portList && portList.length > 1) {
-        callback(portList[portList.length-1].portId)
-      } else {
-        callback('') //Could not find any matching devices
+      console.log('Serial ports available:', portList)
+      
+      // Store the callback and port list for later use
+      pendingPortCallback = callback;
+      availablePorts = portList || [];
+      
+      // Send the port list to the renderer to display in the dialog
+      mainWindow.webContents.send('serial-ports-available', availablePorts);
+      
+      // If no ports are available, call the callback with empty string
+      if (!portList || portList.length === 0) {
+        pendingPortCallback('');
+        pendingPortCallback = null;
       }
     }
   )
+  
+  // Handle the user's selection from the dialog
+  ipcMain.on('select-serial-port-response', (event, portId) => {
+    console.log('User selected port:', portId);
+    if (pendingPortCallback) {
+      pendingPortCallback(portId);
+      pendingPortCallback = null;
+    }
+  })
 
   mainWindow.webContents.session.on('serial-port-added', (event, port) => {
     console.log('serial-port-added FIRED WITH', port)
