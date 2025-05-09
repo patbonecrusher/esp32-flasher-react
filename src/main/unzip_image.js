@@ -14,11 +14,32 @@ function bufferToStream(myBuffer) {
 const unzip_file_in_memory = async (zip_file, zip_entry) => {
   return new Promise((resolve) => {
     zip_file.openReadStream(zip_entry, async (err, readStream) => {
-      const data = {
-        name: zip_entry.fileName,
-        buffer: await buffer(readStream)
+      console.log('zip entry:', JSON.stringify(zip_entry, null, 2))
+      if (err) throw err
+      readStream.on(`end`, () => {
+        console.log('Read stream ended')
+      })
+      readStream.on(`error`, (err) => {
+        console.error('Error reading stream:', err)
+        resolve(undefined)
+      })
+      console.log('zip compressed size:', zip_entry.compressedSize)
+      console.log('zip uncompressed size:', zip_entry.uncompressedSize)
+
+      if (zip_entry.compressionMethod !== 0) {
+        const data = {
+          name: zip_entry.fileName,
+          buffer: await buffer(readStream)
+        }
+        console.log('Unzipped file:', data.buffer)
+        resolve(data)
+      } else {
+        console.log('Unzipped file:', zip_entry.fileName)
+        resolve({
+          name: zip_entry.fileName,
+          buffer: undefined
+        })
       }
-      resolve(data)
     })
   })
 }
